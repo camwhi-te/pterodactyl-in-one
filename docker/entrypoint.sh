@@ -12,6 +12,45 @@ log() { echo "[entrypoint] $*"; }
 
 mkdir -p "$DATA/mysql" "$DATA/redis" "$DATA/storage" /run/mysqld /run/php
 
+# ---- Panel version ----------------------------------------------------------
+# PANEL_VERSION selects the release (e.g. v1.11.11). Unset or "latest" resolves
+# the latest stable release. The version baked into the image is the fallback.
+CUR=$(cat "$APP/.panel-version" 2>/dev/null || echo unknown)
+WANT=${PANEL_VERSION:-latest}
+if [ "$WANT" = "latest" ]; then
+    WANT=$(panel-latest 2>/dev/null || true)
+    if [ -z "$WANT" ]; then
+        log "Could not resolve latest panel version; staying on $CUR"
+        WANT=$CUR
+    fi
+fi
+case "$WANT" in v*) ;; *) WANT="v$WANT" ;; esac
+
+if ! printf '%s' "$WANT" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][A-Za-z0-9.]+)?$'; then
+    log "Invalid PANEL_VERSION '$WANT'; staying on $CUR"
+    WANT=$CUR
+fi
+
+if [ "$WANT" != "$CUR" ] && [ "$WANT" != "unknown" ]; then
+    log "Installing panel $WANT (currently $CUR)"
+    if [ "$(printf '%s\n%s\n' "$CUR" "$WANT" | sort -V | head -n1)" = "$WANT" ]; then
+        log "WARNING: $WANT is older than $CUR; database migrations cannot be undone"
+    fi
+    TMP=$(mktemp -d)
+    if curl -fsSL "https://github.com/pterodactyl/panel/releases/download/$WANT/panel.tar.gz" \
+            | tar -xz -C "$TMP" && [ -f "$TMP/artisan" ]; then
+        rm -rf "$TMP/storage"
+        find "$APP" -mindepth 1 -maxdepth 1 ! -name storage ! -name .env -exec rm -rf {} +
+        cp -a "$TMP/." "$APP/"
+        echo "$WANT" > "$APP/.panel-version"
+        chown -R nginx:nginx "$APP"
+    else
+        log "WARNING: download of panel $WANT failed; staying on $CUR"
+    fi
+    rm -rf "$TMP"
+fi
+log "Panel version: $(cat "$APP/.panel-version" 2>/dev/null || echo unknown)"
+
 # ---- Persistent storage -----------------------------------------------------
 if [ ! -d "$DATA/storage/framework" ]; then
     log "Initialising storage directory"

@@ -15,13 +15,16 @@ RUN apk add --no-cache \
 ENV APP_DIR=/var/www/pterodactyl
 WORKDIR /var/www/pterodactyl
 
-# Download the panel release (ships with vendor/ already built)
-RUN if [ "$PANEL_VERSION" = "latest" ]; then \
-        URL="https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz"; \
-    else \
-        URL="https://github.com/pterodactyl/panel/releases/download/${PANEL_VERSION}/panel.tar.gz"; \
-    fi \
-    && curl -fsSL "$URL" | tar -xz -C "$APP_DIR" \
+COPY docker/panel-latest.sh /usr/local/bin/panel-latest
+RUN chmod +x /usr/local/bin/panel-latest
+
+# Bake in a default panel release (ships with vendor/ already built).
+# The PANEL_VERSION *environment variable* can select another one at runtime.
+RUN VER="$PANEL_VERSION"; \
+    if [ "$VER" = "latest" ]; then VER=$(panel-latest); fi; \
+    [ -n "$VER" ] || { echo "could not resolve panel version"; exit 1; }; \
+    curl -fsSL "https://github.com/pterodactyl/panel/releases/download/${VER}/panel.tar.gz" | tar -xz -C "$APP_DIR" \
+    && echo "$VER" > .panel-version \
     && chmod -R 755 storage bootstrap/cache \
     # storage and .env live on the persistent volume
     && mv storage /opt/storage-default \
