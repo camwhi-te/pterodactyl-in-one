@@ -49,6 +49,7 @@ if [ "$WANT" != "$CUR" ] && [ "$WANT" != "unknown" ]; then
     fi
     rm -rf "$TMP"
 fi
+patch-panel
 log "Panel version: $(cat "$APP/.panel-version" 2>/dev/null || echo unknown)"
 
 # ---- Persistent storage -----------------------------------------------------

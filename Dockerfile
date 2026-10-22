@@ -16,7 +16,8 @@ ENV APP_DIR=/var/www/pterodactyl
 WORKDIR /var/www/pterodactyl
 
 COPY docker/panel-latest.sh /usr/local/bin/panel-latest
-RUN chmod +x /usr/local/bin/panel-latest
+COPY docker/patch-panel.sh /usr/local/bin/patch-panel
+RUN chmod +x /usr/local/bin/panel-latest /usr/local/bin/patch-panel
 
 # Bake in a default panel release (ships with vendor/ already built).
 # The PANEL_VERSION *environment variable* can select another one at runtime.
@@ -30,7 +31,8 @@ RUN VER="$PANEL_VERSION"; \
     && mv storage /opt/storage-default \
     && ln -s /data/storage storage \
     && ln -s /data/.env .env \
-    && chown -R nginx:nginx "$APP_DIR" /opt/storage-default
+    && chown -R nginx:nginx "$APP_DIR" /opt/storage-default \
+    && patch-panel
 
 COPY docker/nginx.conf.template /etc/nginx/nginx.conf.template
 COPY docker/php-fpm.conf /etc/php83/php-fpm.d/www.conf
