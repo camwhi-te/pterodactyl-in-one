@@ -1,0 +1,31 @@
+services:
+  pterodactyl:
+    build:
+      context: .
+      args:
+        PANEL_VERSION: latest   # or a tag such as v1.11.11
+    image: pterodactyl-aio
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-8080}:80"
+    volumes:
+      - pterodactyl-data:/data
+    environment:
+      # The platform's assigned public IP and port; APP_URL is built from them.
+      # (If SERVER_IP is omitted, the container tries to detect its public IP.)
+      SERVER_IP: "${SERVER_IP:-}"
+      SERVER_PORT: "${SERVER_PORT:-8080}"
+      # APP_URL: "https://panel.example.com"   # explicit override, wins over the above
+      # LISTEN_PORT: "80"                      # NGINX port inside the container
+      APP_TIMEZONE: "UTC"
+      # TRUSTED_PROXIES: "*"            # set when behind an HTTPS reverse proxy
+      # First-run admin account (only created if no users exist)
+      ADMIN_EMAIL: "admin@example.com"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "change-me-please"
+      # SMTP (optional)
+      # MAIL_HOST: smtp.example.com
+      # MAIL_PORT: "587"
+
+volumes:
+  pterodactyl-data:
