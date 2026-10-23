@@ -38,14 +38,15 @@ if [ "$WANT" != "$CUR" ] && [ "$WANT" != "unknown" ]; then
     fi
     TMP=$(mktemp -d)
     if curl -fsSL "https://github.com/pterodactyl/panel/releases/download/$WANT/panel.tar.gz" \
-            | tar -xz -C "$TMP" && [ -f "$TMP/artisan" ]; then
+            | tar -xz -C "$TMP" && [ -f "$TMP/artisan" ] \
+            && composer install -d "$TMP" --no-dev --optimize-autoloader --no-interaction --no-progress; then
         rm -rf "$TMP/storage"
         find "$APP" -mindepth 1 -maxdepth 1 ! -name storage ! -name .env -exec rm -rf {} +
         cp -a "$TMP/." "$APP/"
         echo "$WANT" > "$APP/.panel-version"
         chown -R nginx:nginx "$APP"
     else
-        log "WARNING: download of panel $WANT failed; staying on $CUR"
+        log "WARNING: install of panel $WANT failed; staying on $CUR"
     fi
     rm -rf "$TMP"
 fi
@@ -195,7 +196,16 @@ SQL
 
 # Redis isn't running yet, so use file/sync drivers for these commands
 artisan() {
-    su-exec nginx env CACHE_DRIVER=file SESSION_DRIVER=file QUEUE_CONNECTION=sync \
+    artisan_env -- "$@"
+}
+
+# artisan_env [KEY=value ...] -- <artisan args>
+artisan_env() {
+    extra=
+    while [ "$1" != "--" ]; do extra="$extra $1"; shift; done
+    shift
+    # shellcheck disable=SC2086
+    su-exec nginx env CACHE_DRIVER=file SESSION_DRIVER=file QUEUE_CONNECTION=sync $extra \
         php "$APP/artisan" "$@"
 }
 
@@ -214,7 +224,9 @@ if [ -n "${ADMIN_EMAIL:-}" ] && [ -n "${ADMIN_PASSWORD:-}" ]; then
     USERS=$(mariadb --socket="$SOCK" -N -e "SELECT COUNT(*) FROM \`$DB_NAME\`.users")
     if [ "$USERS" = "0" ]; then
         log "Creating admin user $ADMIN_EMAIL"
-        artisan p:user:make \
+        # The welcome email would be sent inline (sync queue); log it instead so
+        # setup doesn't depend on a working SMTP server
+        artisan_env MAIL_MAILER=log -- p:user:make \
             --email="$ADMIN_EMAIL" \
             --username="${ADMIN_USERNAME:-admin}" \
             --name-first="${ADMIN_FIRST_NAME:-Admin}" \

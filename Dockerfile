@@ -10,21 +10,29 @@ RUN apk add --no-cache \
         php83-mysqlnd php83-openssl php83-pcntl php83-pdo php83-pdo_mysql \
         php83-phar php83-posix php83-redis php83-session php83-simplexml \
         php83-sodium php83-tokenizer php83-xml php83-xmlwriter php83-zip \
-    && ln -sf /usr/bin/php83 /usr/bin/php
+    && ln -sf /usr/bin/php83 /usr/bin/php \
+    # Alpine disables TCP by default; the panel connects to 127.0.0.1:3306
+    && sed -i 's/^skip-networking/#skip-networking/' /etc/my.cnf.d/mariadb-server.cnf
 
-ENV APP_DIR=/var/www/pterodactyl
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+ENV APP_DIR=/var/www/pterodactyl \
+    COMPOSER_ALLOW_SUPERUSER=1
 WORKDIR /var/www/pterodactyl
 
 COPY docker/panel-latest.sh /usr/local/bin/panel-latest
 COPY docker/patch-panel.sh /usr/local/bin/patch-panel
 RUN chmod +x /usr/local/bin/panel-latest /usr/local/bin/patch-panel
 
-# Bake in a default panel release (ships with vendor/ already built).
+# Bake in a default panel release. The tarball has prebuilt frontend assets
+# but no vendor/, so PHP dependencies are installed with composer.
 # The PANEL_VERSION *environment variable* can select another one at runtime.
 RUN VER="$PANEL_VERSION"; \
     if [ "$VER" = "latest" ]; then VER=$(panel-latest); fi; \
     [ -n "$VER" ] || { echo "could not resolve panel version"; exit 1; }; \
     curl -fsSL "https://github.com/pterodactyl/panel/releases/download/${VER}/panel.tar.gz" | tar -xz -C "$APP_DIR" \
+    && composer install --no-dev --optimize-autoloader --no-interaction --no-progress \
+    && composer clear-cache \
     && echo "$VER" > .panel-version \
     && chmod -R 755 storage bootstrap/cache \
     # storage and .env live on the persistent volume
